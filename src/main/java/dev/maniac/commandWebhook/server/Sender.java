@@ -5,8 +5,11 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.Expose;
 import dev.maniac.commandWebhook.CommandWebhook;
 import dev.maniac.commandWebhook.config.ConfigHandler;
+import net.minecraft.advancements.PlayerAdvancements;
 import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.ServerChatEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
@@ -57,12 +60,27 @@ public class Sender {
 
     @SubscribeEvent
     public void onChatMessage(ServerChatEvent event) {
+        String jsonMessage = gson.toJson(new WebhookChat(event.getUsername(), event.getMessage()));
+        sendToChatWebhook(jsonMessage);
+    }
+
+    @SubscribeEvent
+    public void onServerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        String jsonMessage = gson.toJson(new WebhookPlayerConnection(event.getPlayer().getDisplayName().getString(), true));
+        sendToChatWebhook(jsonMessage);
+    }
+
+    @SubscribeEvent
+    public void onServerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+        String jsonMessage = gson.toJson(new WebhookPlayerConnection(event.getPlayer().getDisplayName().getString(), false));
+        sendToChatWebhook(jsonMessage);
+    }
+
+    private void sendToChatWebhook(String jsonMessage) {
         for (String webhookURL : ConfigHandler.SERVER.chatWebhookURLs.get()) {
             if (webhookURL.isEmpty()) {
                 return;
             }
-
-            String jsonMessage = gson.toJson(new WebhookChat(event.getUsername(), event.getMessage()));
 
             HttpUriRequest postReq = RequestBuilder.post()
                     .setUri(webhookURL)
@@ -114,6 +132,22 @@ public class Sender {
         WebhookChat(String username, String content) {
             this.username = username;
             this.content = content;
+        }
+    }
+
+    protected class WebhookPlayerConnection {
+        @Expose
+        public final String username;
+        @Expose
+        public final String content;
+
+        WebhookPlayerConnection(String username, boolean joined) {
+            this.username = "System";
+            if (joined) {
+                this.content = username + " has joined the game";
+            } else {
+                this.content = username + " has left the game";
+            }
         }
     }
 }
